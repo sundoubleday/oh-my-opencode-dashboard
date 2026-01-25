@@ -1,4 +1,5 @@
 import * as React from "react";
+import { computeWaitingDing } from "./ding-policy";
 import { playDing, unlockAudio } from "./sound";
 
 type BackgroundTask = {
@@ -176,6 +177,7 @@ export default function App() {
   const hadSuccessRef = React.useRef(false);
   const soundEnabledRef = React.useRef(false);
   const prevWaitingRef = React.useRef<boolean | null>(null);
+  const lastLeftWaitingAtRef = React.useRef<number | null>(null);
   const prevPlanCompletedRef = React.useRef<number | null>(null);
   const prevPlanTotalRef = React.useRef<number | null>(null);
 
@@ -233,6 +235,9 @@ export default function App() {
     if (!soundEnabledRef.current) return;
     if (!hadSuccessRef.current) return;
 
+    const nowMs = Date.now();
+    const suppressFastIdleRoundTripMs = 20_000;
+
     const waiting = isWaitingForUser(next);
     const prevWaiting = prevWaitingRef.current;
 
@@ -253,11 +258,22 @@ export default function App() {
       }
     }
 
-    if (prevWaiting === false && waiting === true) {
+    const waitingDecision = computeWaitingDing({
+      prev: {
+        prevWaiting,
+        lastLeftWaitingAtMs: lastLeftWaitingAtRef.current,
+      },
+      waiting,
+      nowMs,
+      suppressMs: suppressFastIdleRoundTripMs,
+    });
+
+    if (waitingDecision.play) {
       void playDing("waiting");
     }
 
-    prevWaitingRef.current = waiting;
+    prevWaitingRef.current = waitingDecision.next.prevWaiting;
+    lastLeftWaitingAtRef.current = waitingDecision.next.lastLeftWaitingAtMs;
     prevPlanCompletedRef.current = completed;
     prevPlanTotalRef.current = total;
   }
