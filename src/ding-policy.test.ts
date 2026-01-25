@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest"
 import { computeWaitingDing } from "./ding-policy"
 
 describe("computeWaitingDing", () => {
-  it("does not ding on first observation", () => {
+  it("dings on first observation when waiting", () => {
     const res = computeWaitingDing({
       prev: { prevWaiting: null, lastLeftWaitingAtMs: null },
       waiting: true,
       nowMs: 1000,
     })
 
-    expect(res.play).toBe(false)
+    expect(res.play).toBe(true)
     expect(res.next.prevWaiting).toBe(true)
   })
 

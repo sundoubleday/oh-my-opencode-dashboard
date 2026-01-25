@@ -18,7 +18,9 @@ export function computeWaitingDing(opts: {
   }
 
   let play = false
-  if (opts.prev.prevWaiting === false && opts.waiting === true) {
+  if (opts.prev.prevWaiting === null && opts.waiting === true) {
+    play = true
+  } else if (opts.prev.prevWaiting === false && opts.waiting === true) {
     const dt = typeof lastLeftWaitingAtMs === "number" ? opts.nowMs - lastLeftWaitingAtMs : null
     play = !(typeof dt === "number" && dt >= 0 && dt < suppressMs)
   }
