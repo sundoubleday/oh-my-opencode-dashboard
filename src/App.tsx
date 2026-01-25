@@ -400,7 +400,7 @@ export default function App() {
     return hasSession && idle && noTool;
   }
 
-  function maybePlayDings(next: DashboardPayload) {
+  function maybePlayDings(prev: DashboardPayload | null, next: DashboardPayload) {
     if (!soundEnabledRef.current) return;
     if (!hadSuccessRef.current) return;
 
@@ -425,6 +425,12 @@ export default function App() {
       if (samePlan && completed > prevCompleted) {
         void playDing("task");
       }
+    }
+
+    const tool = String(next.mainSession.currentTool ?? "").trim().toLowerCase();
+    const prevTool = String(prev?.mainSession.currentTool ?? "").trim().toLowerCase();
+    if (tool === "question" && prevTool !== "question") {
+      void playDing("question");
     }
 
     const waitingDecision = computeWaitingDing({
@@ -468,10 +474,12 @@ export default function App() {
         hadSuccessRef.current = true;
         setConnected(true);
         setErrorHint(null);
-        const next = toDashboardPayload(json);
-        maybePlayDings(next);
-        setData(next);
-        setLastUpdate(Date.now());
+         const next = toDashboardPayload(json);
+         setData((prev) => {
+           maybePlayDings(prev, next);
+           return next;
+         });
+         setLastUpdate(Date.now());
       } catch (err) {
         if (!alive) return;
         nextConnected = false;

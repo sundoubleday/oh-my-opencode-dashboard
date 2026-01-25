@@ -1,6 +1,10 @@
-export type DingKind = "waiting" | "task" | "all"
+export type DingKind = "waiting" | "task" | "all" | "question"
 
 let ctx: AudioContext | null = null
+
+export function __resetAudioForTests(): void {
+  ctx = null
+}
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null
@@ -79,6 +83,13 @@ export async function playDing(kind: DingKind): Promise<void> {
   if (kind === "task") {
     playTone({ at: t0, freq: 659, dur: 0.08, gain: baseGain })
     playTone({ at: t0 + 0.10, freq: 880, dur: 0.10, gain: baseGain })
+    return
+  }
+
+  if (kind === "question") {
+    playTone({ at: t0, freq: 988, dur: 0.07, gain: baseGain })
+    playTone({ at: t0 + 0.09, freq: 740, dur: 0.11, gain: baseGain })
+    playTone({ at: t0 + 0.22, freq: 880, dur: 0.08, gain: baseGain })
     return
   }
 
