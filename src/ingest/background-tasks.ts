@@ -116,7 +116,39 @@ function findBackgroundSessionId(opts: {
       m.time?.created >= windowStart &&
       m.time?.created <= windowEnd
   )
-  candidates.sort((a, b) => b.time.created - a.time.created)
+  // Deterministic tie-breaking: max by time.created, then lexicographic id
+  candidates.sort((a, b) => {
+    const at = a.time?.created ?? 0
+    const bt = b.time?.created ?? 0
+    if (at !== bt) return bt - at
+    return String(a.id).localeCompare(String(b.id))
+  })
+  return candidates[0]?.id ?? null
+}
+
+function findTaskSessionId(opts: {
+  allSessionMetas: SessionMetadata[]
+  parentSessionId: string
+  description: string
+  startedAt: number
+}): string | null {
+  const title = `Task: ${opts.description}`
+  const windowStart = opts.startedAt
+  const windowEnd = opts.startedAt + 60_000
+
+  const candidates = opts.allSessionMetas.filter(
+    (m) =>
+      m.parentID === opts.parentSessionId &&
+      m.title === title &&
+      m.time?.created >= windowStart &&
+      m.time?.created <= windowEnd
+  )
+  candidates.sort((a, b) => {
+    const at = a.time?.created ?? 0
+    const bt = b.time?.created ?? 0
+    if (at !== bt) return bt - at
+    return String(a.id).localeCompare(String(b.id))
+  })
   return candidates[0]?.id ?? null
 }
 
@@ -180,7 +212,7 @@ export function deriveBackgroundTasks(opts: {
       if (typeof input !== "object" || input === null) continue
 
       const runInBackground = (input as Record<string, unknown>).run_in_background
-      if (runInBackground !== true) continue
+      if (runInBackground !== true && runInBackground !== false) continue
 
       const description = clampString((input as Record<string, unknown>).description, DESCRIPTION_MAX)
       if (!description) continue
@@ -189,12 +221,44 @@ export function deriveBackgroundTasks(opts: {
       const category = clampString((input as Record<string, unknown>).category, AGENT_MAX)
       const agent = subagentType ?? (category ? `sisyphus-junior (${category})` : "unknown")
 
-      const backgroundSessionId = findBackgroundSessionId({
-        allSessionMetas,
-        parentSessionId: opts.mainSessionId,
-        description,
-        startedAt,
-      })
+      let backgroundSessionId: string | null = null
+      
+      if (runInBackground) {
+        backgroundSessionId = findBackgroundSessionId({
+          allSessionMetas,
+          parentSessionId: opts.mainSessionId,
+          description,
+          startedAt,
+        })
+      } else {
+        // For sync tasks, check if resume is specified
+        const resume = (input as Record<string, unknown>).resume
+        if (typeof resume === "string" && resume.trim() !== "") {
+          // Check if resumed session exists (has readable messages dir)
+          const resumeMessageDir = getMessageDir(opts.storage.message, resume.trim())
+          if (fs.existsSync(resumeMessageDir) && fs.readdirSync(resumeMessageDir).length > 0) {
+            backgroundSessionId = resume.trim()
+          }
+        }
+        
+        if (!backgroundSessionId) {
+          backgroundSessionId = findBackgroundSessionId({
+            allSessionMetas,
+            parentSessionId: opts.mainSessionId,
+            description,
+            startedAt,
+          })
+          
+          if (!backgroundSessionId) {
+            backgroundSessionId = findTaskSessionId({
+              allSessionMetas,
+              parentSessionId: opts.mainSessionId,
+              description,
+              startedAt,
+            })
+          }
+        }
+      }
 
       const stats = backgroundSessionId
         ? deriveBackgroundSessionStats(opts.storage, backgroundSessionId)

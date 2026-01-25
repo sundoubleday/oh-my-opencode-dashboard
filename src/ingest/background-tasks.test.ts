@@ -117,4 +117,585 @@ describe("deriveBackgroundTasks", () => {
     expect((rows[0] as unknown as Record<string, unknown>).input).toBeUndefined()
     expect((rows[0] as unknown as Record<string, unknown>).state).toBeUndefined()
   })
+
+  it("selects deterministic background session when multiple candidates have identical created timestamps", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_tie.json"),
+      JSON.stringify({
+        id: "part_tie",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_tie",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: true,
+            description: "Tie-break test",
+            subagent_type: "explore",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    const projectID = "proj"
+    const sessDir = path.join(storage.session, projectID)
+    fs.mkdirSync(sessDir, { recursive: true })
+    
+    const sharedTimestamp = 1500
+    fs.writeFileSync(
+      path.join(sessDir, "ses_zzz.json"),
+      JSON.stringify({
+        id: "ses_zzz",
+        projectID,
+        directory: "/tmp/project",
+        title: "Background: Tie-break test",
+        parentID: mainSessionId,
+        time: { created: sharedTimestamp, updated: sharedTimestamp },
+      }),
+      "utf8"
+    )
+    fs.writeFileSync(
+      path.join(sessDir, "ses_aaa.json"),
+      JSON.stringify({
+        id: "ses_aaa",
+        projectID,
+        directory: "/tmp/project",
+        title: "Background: Tie-break test",
+        parentID: mainSessionId,
+        time: { created: sharedTimestamp, updated: sharedTimestamp },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].sessionId).toBe("ses_aaa")
+    expect(rows[0].description).toBe("Tie-break test")
+    expect(rows[0].agent).toBe("explore")
+  })
+
+  it("includes sync delegate_task rows when run_in_background is false", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+
+    // Main session message + sync tool part
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_sync.json"),
+      JSON.stringify({
+        id: "part_sync",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_sync",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: false,
+            description: "Quick analysis",
+            category: "quick",
+            prompt: "SHOULD NOT APPEAR",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].description).toBe("Quick analysis")
+    expect(rows[0].agent).toBe("sisyphus-junior (quick)")
+    expect(rows[0].sessionId).toBe(null) // No background session for sync tasks
+    expect(rows[0].toolCalls).toBe(null) // No background session stats for sync tasks
+    expect(rows[0].lastTool).toBe(null)
+    expect(rows[0].status).toBe("queued") // Should show queued for unlinked sync tasks
+
+    // Ensure no sensitive keys leak
+    expect((rows[0] as unknown as Record<string, unknown>).prompt).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).input).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).state).toBeUndefined()
+  })
+
+  it("selects deterministic task session when multiple candidates have identical created timestamps", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_tie_task.json"),
+      JSON.stringify({
+        id: "part_tie_task",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_tie_task",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: false,
+            description: "Task tie-break test",
+            category: "quick",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    const projectID = "proj"
+    const sessDir = path.join(storage.session, projectID)
+    fs.mkdirSync(sessDir, { recursive: true })
+    
+    const sharedTimestamp = 1500
+    fs.writeFileSync(
+      path.join(sessDir, "ses_task_zzz.json"),
+      JSON.stringify({
+        id: "ses_task_zzz",
+        projectID,
+        directory: "/tmp/project",
+        title: "Task: Task tie-break test",
+        parentID: mainSessionId,
+        time: { created: sharedTimestamp, updated: sharedTimestamp },
+      }),
+      "utf8"
+    )
+    fs.writeFileSync(
+      path.join(sessDir, "ses_task_aaa.json"),
+      JSON.stringify({
+        id: "ses_task_aaa",
+        projectID,
+        directory: "/tmp/project",
+        title: "Task: Task tie-break test",
+        parentID: mainSessionId,
+        time: { created: sharedTimestamp, updated: sharedTimestamp },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].sessionId).toBe("ses_task_aaa")
+    expect(rows[0].description).toBe("Task tie-break test")
+    expect(rows[0].agent).toBe("sisyphus-junior (quick)")
+  })
+
+  it("links sync delegate_task rows to Task sessions when available", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+
+    // Main session message + sync tool part
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_sync.json"),
+      JSON.stringify({
+        id: "part_sync",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_sync",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: false,
+            description: "Quick analysis",
+            category: "quick",
+            prompt: "SHOULD NOT APPEAR",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    // Child session metadata with Task: title that should be correlated
+    const projectID = "proj"
+    const sessDir = path.join(storage.session, projectID)
+    fs.mkdirSync(sessDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(sessDir, "ses_task.json"),
+      JSON.stringify({
+        id: "ses_task",
+        projectID,
+        directory: "/tmp/project",
+        title: "Task: Quick analysis",
+        parentID: mainSessionId,
+        time: { created: 1050, updated: 1050 },
+      }),
+      "utf8"
+    )
+
+    // Task session message with a tool call
+    const taskMsgDir = path.join(storage.message, "ses_task")
+    fs.mkdirSync(taskMsgDir, { recursive: true })
+    const taskMsgId = "msg_task"
+    fs.writeFileSync(
+      path.join(taskMsgDir, `${taskMsgId}.json`),
+      JSON.stringify({
+        id: taskMsgId,
+        sessionID: "ses_task",
+        role: "assistant",
+        time: { created: 1100 },
+      }),
+      "utf8"
+    )
+    const taskPartDir = path.join(storage.part, taskMsgId)
+    fs.mkdirSync(taskPartDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(taskPartDir, "part_1.json"),
+      JSON.stringify({
+        id: "part_1",
+        sessionID: "ses_task",
+        messageID: taskMsgId,
+        type: "tool",
+        callID: "call_x",
+        tool: "read",
+        state: { status: "completed", input: {} },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].description).toBe("Quick analysis")
+    expect(rows[0].agent).toBe("sisyphus-junior (quick)")
+    expect(rows[0].sessionId).toBe("ses_task") // Should be linked to Task session
+    expect(rows[0].toolCalls).toBe(1)
+    expect(rows[0].lastTool).toBe("read")
+    expect(rows[0].status).toBe("completed") // Should be completed since Task session has tool calls
+
+    // Ensure no sensitive keys leak
+    expect((rows[0] as unknown as Record<string, unknown>).prompt).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).input).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).state).toBeUndefined()
+  })
+
+  it("links sync delegate_task rows to resumed session when resume is specified", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+    const resumedSessionId = "ses_resumed"
+
+    // Main session message + sync tool part with resume
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_resume.json"),
+      JSON.stringify({
+        id: "part_resume",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_resume",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: false,
+            description: "Resume work",
+            category: "quick",
+            resume: resumedSessionId,
+            prompt: "SHOULD NOT APPEAR",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    // Resumed session message + tool call
+    const resumedMsgDir = path.join(storage.message, resumedSessionId)
+    fs.mkdirSync(resumedMsgDir, { recursive: true })
+    const resumedMsgId = "msg_resumed"
+    fs.writeFileSync(
+      path.join(resumedMsgDir, `${resumedMsgId}.json`),
+      JSON.stringify({
+        id: resumedMsgId,
+        sessionID: resumedSessionId,
+        role: "assistant",
+        time: { created: 500 },
+      }),
+      "utf8"
+    )
+    const resumedPartDir = path.join(storage.part, resumedMsgId)
+    fs.mkdirSync(resumedPartDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(resumedPartDir, "part_1.json"),
+      JSON.stringify({
+        id: "part_1",
+        sessionID: resumedSessionId,
+        messageID: resumedMsgId,
+        type: "tool",
+        callID: "call_grep",
+        tool: "grep",
+        state: { status: "completed", input: {} },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].description).toBe("Resume work")
+    expect(rows[0].agent).toBe("sisyphus-junior (quick)")
+    expect(rows[0].sessionId).toBe(resumedSessionId) // Should be linked to resumed session
+    expect(rows[0].toolCalls).toBe(1)
+    expect(rows[0].lastTool).toBe("grep")
+    expect(rows[0].status).toBe("completed") // Should be completed since resumed session has tool calls
+
+    // Ensure no sensitive keys leak
+    expect((rows[0] as unknown as Record<string, unknown>).prompt).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).input).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).state).toBeUndefined()
+  })
+
+  it("falls back to title-based matching when resume session does not exist", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+    const nonExistentResumeId = "ses_nonexistent"
+
+    // Main session message + sync tool part with non-existent resume
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_fallback.json"),
+      JSON.stringify({
+        id: "part_fallback",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_fallback",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: false,
+            description: "Fallback task",
+            category: "quick",
+            resume: nonExistentResumeId,
+            prompt: "SHOULD NOT APPEAR",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    // Child session metadata with Task: title that should be used as fallback
+    const projectID = "proj"
+    const sessDir = path.join(storage.session, projectID)
+    fs.mkdirSync(sessDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(sessDir, "ses_task.json"),
+      JSON.stringify({
+        id: "ses_task",
+        projectID,
+        directory: "/tmp/project",
+        title: "Task: Fallback task",
+        parentID: mainSessionId,
+        time: { created: 1050, updated: 1050 },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].description).toBe("Fallback task")
+    expect(rows[0].sessionId).toBe("ses_task") // Should fallback to Task session
+    expect(rows[0].toolCalls).toBe(0) // No tool calls in fallback session
+    expect(rows[0].lastTool).toBe(null)
+    expect(rows[0].status).toBe("unknown") // Should be unknown since session exists but no tool calls
+  })
+
+  it("links sync delegate_task rows to Background sessions when forced-to-background but waited", () => {
+    const storageRoot = mkStorageRoot()
+    const storage = getStorageRoots(storageRoot)
+    const mainSessionId = "ses_main"
+
+    const msgDir = path.join(storage.message, mainSessionId)
+    fs.mkdirSync(msgDir, { recursive: true })
+    const messageID = "msg_1"
+    fs.writeFileSync(
+      path.join(msgDir, `${messageID}.json`),
+      JSON.stringify({
+        id: messageID,
+        sessionID: mainSessionId,
+        role: "assistant",
+        time: { created: 1000 },
+      }),
+      "utf8"
+    )
+    const partDir = path.join(storage.part, messageID)
+    fs.mkdirSync(partDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(partDir, "part_forced.json"),
+      JSON.stringify({
+        id: "part_forced",
+        sessionID: mainSessionId,
+        messageID,
+        type: "tool",
+        callID: "call_forced",
+        tool: "delegate_task",
+        state: {
+          status: "completed",
+          input: {
+            run_in_background: false,
+            description: "Forced background task",
+            category: "quick",
+            prompt: "SHOULD NOT APPEAR",
+          },
+        },
+      }),
+      "utf8"
+    )
+
+    const projectID = "proj"
+    const sessDir = path.join(storage.session, projectID)
+    fs.mkdirSync(sessDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(sessDir, "ses_background.json"),
+      JSON.stringify({
+        id: "ses_background",
+        projectID,
+        directory: "/tmp/project",
+        title: "Background: Forced background task",
+        parentID: mainSessionId,
+        time: { created: 1050, updated: 1050 },
+      }),
+      "utf8"
+    )
+
+    const backgroundMsgDir = path.join(storage.message, "ses_background")
+    fs.mkdirSync(backgroundMsgDir, { recursive: true })
+    const backgroundMsgId = "msg_background"
+    fs.writeFileSync(
+      path.join(backgroundMsgDir, `${backgroundMsgId}.json`),
+      JSON.stringify({
+        id: backgroundMsgId,
+        sessionID: "ses_background",
+        role: "assistant",
+        time: { created: 1100 },
+      }),
+      "utf8"
+    )
+    const backgroundPartDir = path.join(storage.part, backgroundMsgId)
+    fs.mkdirSync(backgroundPartDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(backgroundPartDir, "part_1.json"),
+      JSON.stringify({
+        id: "part_1",
+        sessionID: "ses_background",
+        messageID: backgroundMsgId,
+        type: "tool",
+        callID: "call_x",
+        tool: "bash",
+        state: { status: "completed", input: {} },
+      }),
+      "utf8"
+    )
+
+    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    expect(rows.length).toBe(1)
+    expect(rows[0].description).toBe("Forced background task")
+    expect(rows[0].agent).toBe("sisyphus-junior (quick)")
+    expect(rows[0].sessionId).toBe("ses_background")
+    expect(rows[0].toolCalls).toBe(1)
+    expect(rows[0].lastTool).toBe("bash")
+    expect(rows[0].status).toBe("completed")
+
+    expect((rows[0] as unknown as Record<string, unknown>).prompt).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).input).toBeUndefined()
+    expect((rows[0] as unknown as Record<string, unknown>).state).toBeUndefined()
+  })
 })
