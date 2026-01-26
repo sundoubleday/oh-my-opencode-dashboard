@@ -100,3 +100,18 @@ This dashboard is designed to avoid sensitive data:
 - If the dashboard shows "Disconnected" in dev, make sure the API server is running and the UI is using the Vite proxy.
 - If plan progress stays empty, verify your target project has `.sisyphus/boulder.json`.
 - If sessions are not detected, verify OpenCode storage exists under `${XDG_DATA_HOME ?? ~/.local/share}/opencode/storage`.
+
+## Publishing (Maintainers)
+
+This package is published via GitHub Actions using npm Trusted Publishing (OIDC) (no `NPM_TOKEN`).
+
+One-time setup (browser):
+
+1. Open npm for `oh-my-opencode-dashboard` -> `Settings` -> `Trusted Publisher` -> select `GitHub Actions`.
+2. Configure:
+   - Organization/user: `code-yeongyu`
+   - Repository: `oh-my-opencode`
+   - Workflow filename: `test-and-publish.yml`
+   - Environment name: leave blank unless you use GitHub Environments
+
+After OIDC is verified, remove any `NPM_TOKEN` secrets used for publishing.
