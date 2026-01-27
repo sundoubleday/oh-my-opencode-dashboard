@@ -4,6 +4,8 @@ import type { OpenCodeStorageRoots, SessionMetadata, StoredMessageMeta, StoredTo
 import { getMessageDir } from "./session"
 import { pickLatestModelString } from "./model"
 
+type FsLike = Pick<typeof fs, "readFileSync" | "readdirSync" | "existsSync" | "statSync"> 
+
 export type BackgroundTaskRow = {
   id: string
   description: string
@@ -26,31 +28,31 @@ function clampString(value: unknown, maxLen: number): string | null {
   return s.length <= maxLen ? s : s.slice(0, maxLen)
 }
 
-function readJsonFile<T>(filePath: string): T | null {
+function readJsonFile<T>(filePath: string, fsLike: FsLike): T | null {
   try {
-    const content = fs.readFileSync(filePath, "utf8")
+    const content = fsLike.readFileSync(filePath, "utf8")
     return JSON.parse(content) as T
   } catch {
     return null
   }
 }
 
-function listJsonFiles(dir: string): string[] {
+function listJsonFiles(dir: string, fsLike: FsLike): string[] {
   try {
-    return fs.readdirSync(dir).filter((f) => f.endsWith(".json"))
+    return fsLike.readdirSync(dir).filter((f) => f.endsWith(".json"))
   } catch {
     return []
   }
 }
 
-function readToolPartsForMessage(storage: OpenCodeStorageRoots, messageID: string): StoredToolPart[] {
+function readToolPartsForMessage(storage: OpenCodeStorageRoots, messageID: string, fsLike: FsLike): StoredToolPart[] {
   const partDir = path.join(storage.part, messageID)
-  if (!fs.existsSync(partDir)) return []
+  if (!fsLike.existsSync(partDir)) return []
 
-  const files = listJsonFiles(partDir).sort()
+  const files = listJsonFiles(partDir, fsLike).sort()
   const parts: StoredToolPart[] = []
   for (const f of files) {
-    const p = readJsonFile<StoredToolPart>(path.join(partDir, f))
+    const p = readJsonFile<StoredToolPart>(path.join(partDir, f), fsLike)
     if (p && p.type === "tool" && typeof p.tool === "string" && p.state && typeof p.state === "object") {
       parts.push(p)
     }
@@ -58,14 +60,14 @@ function readToolPartsForMessage(storage: OpenCodeStorageRoots, messageID: strin
   return parts
 }
 
-function readRecentMessageMetas(messageDir: string, maxMessages: number): StoredMessageMeta[] {
-  if (!messageDir || !fs.existsSync(messageDir)) return []
-  const files = listJsonFiles(messageDir)
+function readRecentMessageMetas(messageDir: string, maxMessages: number, fsLike: FsLike): StoredMessageMeta[] {
+  if (!messageDir || !fsLike.existsSync(messageDir)) return []
+  const files = listJsonFiles(messageDir, fsLike)
     .map((f) => ({
       f,
       mtime: (() => {
         try {
-          return fs.statSync(path.join(messageDir, f)).mtimeMs
+          return fsLike.statSync(path.join(messageDir, f)).mtimeMs
         } catch {
           return 0
         }
@@ -76,22 +78,22 @@ function readRecentMessageMetas(messageDir: string, maxMessages: number): Stored
 
   const metas: StoredMessageMeta[] = []
   for (const item of files) {
-    const meta = readJsonFile<StoredMessageMeta>(path.join(messageDir, item.f))
+    const meta = readJsonFile<StoredMessageMeta>(path.join(messageDir, item.f), fsLike)
     if (meta && typeof meta.id === "string") metas.push(meta)
   }
   return metas
 }
 
-export function readAllSessionMetas(sessionStorage: string): SessionMetadata[] {
-  if (!fs.existsSync(sessionStorage)) return []
+export function readAllSessionMetas(sessionStorage: string, fsLike: FsLike = fs): SessionMetadata[] {
+  if (!fsLike.existsSync(sessionStorage)) return []
   const metas: SessionMetadata[] = []
   try {
-    const projectDirs = fs.readdirSync(sessionStorage, { withFileTypes: true })
+    const projectDirs = fsLike.readdirSync(sessionStorage, { withFileTypes: true })
     for (const d of projectDirs) {
       if (!d.isDirectory()) continue
       const projectPath = path.join(sessionStorage, d.name)
-      for (const file of listJsonFiles(projectPath)) {
-        const meta = readJsonFile<SessionMetadata>(path.join(projectPath, file))
+      for (const file of listJsonFiles(projectPath, fsLike)) {
+        const meta = readJsonFile<SessionMetadata>(path.join(projectPath, file), fsLike)
         if (meta && typeof meta.id === "string") metas.push(meta)
       }
     }
@@ -154,7 +156,11 @@ function findTaskSessionId(opts: {
   return candidates[0]?.id ?? null
 }
 
-function deriveBackgroundSessionStats(storage: OpenCodeStorageRoots, metas: StoredMessageMeta[]): { toolCalls: number; lastTool: string | null; lastUpdateAt: number | null } {
+function deriveBackgroundSessionStats(
+  storage: OpenCodeStorageRoots,
+  metas: StoredMessageMeta[],
+  fsLike: FsLike
+): { toolCalls: number; lastTool: string | null; lastUpdateAt: number | null } {
   let toolCalls = 0
   let lastTool: string | null = null
   let lastUpdateAt: number | null = null
@@ -170,7 +176,7 @@ function deriveBackgroundSessionStats(storage: OpenCodeStorageRoots, metas: Stor
   for (const meta of ordered) {
     const created = meta.time?.created
     if (typeof created === "number") lastUpdateAt = created
-    const parts = readToolPartsForMessage(storage, meta.id)
+    const parts = readToolPartsForMessage(storage, meta.id, fsLike)
     for (const p of parts) {
       toolCalls += 1
       lastTool = p.tool
@@ -211,11 +217,13 @@ export function deriveBackgroundTasks(opts: {
   storage: OpenCodeStorageRoots
   mainSessionId: string
   nowMs?: number
+  fs?: FsLike
 }): BackgroundTaskRow[] {
+  const fsLike: FsLike = opts.fs ?? fs
   const nowMs = opts.nowMs ?? Date.now()
   const messageDir = getMessageDir(opts.storage.message, opts.mainSessionId)
-  const metas = readRecentMessageMetas(messageDir, 200)
-  const allSessionMetas = readAllSessionMetas(opts.storage.session)
+  const metas = readRecentMessageMetas(messageDir, 200, fsLike)
+  const allSessionMetas = readAllSessionMetas(opts.storage.session, fsLike)
   const backgroundMessageCache = new Map<string, StoredMessageMeta[]>()
   const backgroundStatsCache = new Map<string, { toolCalls: number; lastTool: string | null; lastUpdateAt: number | null }>()
   const backgroundModelCache = new Map<string, string | null>()
@@ -224,7 +232,7 @@ export function deriveBackgroundTasks(opts: {
     const cached = backgroundMessageCache.get(sessionId)
     if (cached) return cached
     const backgroundMessageDir = getMessageDir(opts.storage.message, sessionId)
-    const recent = readRecentMessageMetas(backgroundMessageDir, 200)
+    const recent = readRecentMessageMetas(backgroundMessageDir, 200, fsLike)
     backgroundMessageCache.set(sessionId, recent)
     return recent
   }
@@ -233,7 +241,7 @@ export function deriveBackgroundTasks(opts: {
     const cached = backgroundStatsCache.get(sessionId)
     if (cached) return cached
     const recent = readBackgroundMetas(sessionId)
-    const stats = deriveBackgroundSessionStats(opts.storage, recent)
+    const stats = deriveBackgroundSessionStats(opts.storage, recent, fsLike)
     backgroundStatsCache.set(sessionId, stats)
     return stats
   }
@@ -254,7 +262,7 @@ export function deriveBackgroundTasks(opts: {
     const startedAt = meta.time?.created ?? null
     if (typeof startedAt !== "number") continue
 
-    const parts = readToolPartsForMessage(opts.storage, meta.id)
+    const parts = readToolPartsForMessage(opts.storage, meta.id, fsLike)
     for (const part of parts) {
       if (part.tool !== "delegate_task") continue
       if (!part.state || typeof part.state !== "object") continue
@@ -287,7 +295,7 @@ export function deriveBackgroundTasks(opts: {
         if (typeof resume === "string" && resume.trim() !== "") {
           // Check if resumed session exists (has readable messages dir)
           const resumeMessageDir = getMessageDir(opts.storage.message, resume.trim())
-          if (fs.existsSync(resumeMessageDir) && fs.readdirSync(resumeMessageDir).length > 0) {
+          if (fsLike.existsSync(resumeMessageDir) && fsLike.readdirSync(resumeMessageDir).length > 0) {
             backgroundSessionId = resume.trim()
           }
         }

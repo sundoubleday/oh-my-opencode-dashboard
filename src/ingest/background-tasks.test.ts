@@ -1,18 +1,7 @@
 import * as os from "node:os"
 import * as path from "node:path"
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
-
-const fs = await vi.importActual<typeof import("node:fs")>("node:fs")
-
-vi.mock("node:fs", async () => {
-  const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs")
-  return {
-    ...actualFs,
-    readdirSync: vi.fn(actualFs.readdirSync),
-  }
-})
-
-import * as mockedFs from "node:fs"
+import * as fs from "node:fs"
+import { describe, expect, it, vi } from "vitest"
 import { deriveBackgroundTasks } from "./background-tasks"
 import { getStorageRoots } from "./session"
 
@@ -992,13 +981,19 @@ describe("deriveBackgroundTasks", () => {
       "utf8"
     )
 
-    const readdirSpy = vi.mocked(mockedFs.readdirSync)
+    const readdirSync = vi.fn(fs.readdirSync)
+    const fsLike = {
+      readFileSync: fs.readFileSync,
+      readdirSync,
+      existsSync: fs.existsSync,
+      statSync: fs.statSync,
+    }
 
     // #when
-    const rows = deriveBackgroundTasks({ storage, mainSessionId })
+    const rows = deriveBackgroundTasks({ storage, mainSessionId, fs: fsLike })
 
     // #then
-    const backgroundReads = readdirSpy.mock.calls.filter((call) => call[0] === childMsgDir)
+    const backgroundReads = readdirSync.mock.calls.filter((call) => call[0] === childMsgDir)
     expect(rows.length).toBe(2)
     expect(backgroundReads.length).toBe(1)
   })
