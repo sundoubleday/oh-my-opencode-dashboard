@@ -442,14 +442,14 @@ body {
   transform: translateY(0px);
 }
 
-.buttonIcon {
+.button.buttonIcon {
   padding: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.buttonIcon svg {
+.button.buttonIcon svg {
   display: block;
 }
 

@@ -793,15 +793,31 @@ export default function App() {
   });
 
   React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const savedTheme = window.localStorage.getItem("omoDashboardTheme");
+      if (savedTheme === "light" || savedTheme === "dark") {
+        setTheme(savedTheme);
+      }
+    } catch {
+      // Ignore localStorage access errors
+    }
+  }, []);
+
+  React.useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    document.documentElement.style.setProperty("color-scheme", theme);
   }, [theme]);
 
   React.useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     function handleChange(e: MediaQueryListEvent) {
-      const saved = window.localStorage.getItem("omoDashboardTheme");
+      let saved: string | null = null;
+      try {
+        saved = window.localStorage.getItem("omoDashboardTheme");
+      } catch {
+        // Ignore localStorage errors
+      }
       if (!saved) {
         setTheme(e.matches ? "dark" : "light");
       }
