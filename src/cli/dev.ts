@@ -52,12 +52,10 @@ async function main() {
 
   const apiServer = spawn('bun', apiArgs, {
     stdio: 'inherit',
-    shell: true
   });
 
   const uiServer = spawn('bun', uiArgs, {
     stdio: 'inherit',
-    shell: true,
     env: {
       ...process.env,
       OMO_DASHBOARD_API_PORT: resolvedPort.toString(),
