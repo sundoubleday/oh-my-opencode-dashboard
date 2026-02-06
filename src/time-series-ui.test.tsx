@@ -10,6 +10,7 @@ import {
   computeMainAgentsScaleMax,
   computeOtherMainAgentsCount,
 } from "./App";
+import { en } from "./i18n/locales/en";
 
 type TimeSeriesProps = React.ComponentProps<typeof TimeSeriesActivitySection>;
 
@@ -45,7 +46,7 @@ describe("TimeSeriesActivitySection (SSR)", () => {
     const timeSeries = mkTimeSeries();
 
     // #when
-    const html = renderToStaticMarkup(<TimeSeriesActivitySection timeSeries={timeSeries} />);
+    const html = renderToStaticMarkup(<TimeSeriesActivitySection timeSeries={timeSeries} t={en} />);
 
     // #then
     expect(html).not.toContain("timeSeriesAxisTop");
@@ -65,7 +66,7 @@ describe("TimeSeriesActivitySection (SSR)", () => {
     });
 
     // #when
-    const html = renderToStaticMarkup(<TimeSeriesActivitySection timeSeries={timeSeries} />);
+    const html = renderToStaticMarkup(<TimeSeriesActivitySection timeSeries={timeSeries} t={en} />);
 
     // #then
     expect(html).toContain("timeSeriesBar--sand");

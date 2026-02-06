@@ -1,5 +1,7 @@
 # Oh My OpenCode Dashboard
 
+English | [中文](./README_CN.md)
+
 Local-only, read-only dashboard for viewing OpenCode & OhMyOpenCode agent progress.
 
 ![Dashboard GUI](./gui.png)

@@ -3,6 +3,7 @@ import { computeWaitingDing } from "./ding-policy";
 import { playDing, unlockAudio } from "./sound";
 import { computeStackedSegments } from "./timeseries-stacked";
 import { formatTokenCount } from "./format-token-count";
+import { useI18n, type Translations } from "./i18n";
 
 const APP_VERSION =
   typeof __APP_VERSION__ === "string" && __APP_VERSION__.trim().length > 0 ? __APP_VERSION__ : "0.0.0";
@@ -154,7 +155,8 @@ export function computeMainAgentsScaleMax(params: {
   return Math.max(1, sumMax || 1);
 }
 
-export function TimeSeriesActivitySection(props: { timeSeries: TimeSeries }) {
+export function TimeSeriesActivitySection(props: { timeSeries: TimeSeries; t: Translations }) {
+  const { t } = props;
   const timeSeriesById = new Map<TimeSeriesSeriesId, TimeSeriesSeries>();
   for (const s of props.timeSeries.series) {
     if (s && typeof s.id === "string") {
@@ -170,29 +172,29 @@ export function TimeSeriesActivitySection(props: { timeSeries: TimeSeries }) {
 
   const overallValues = timeSeriesById.get("overall-main")?.values ?? [];
 
+  const rowConfigs = [
+    {
+      kind: "main-agents" as const,
+      label: t.timeseries.mainAgents,
+    },
+    {
+      kind: "single" as const,
+      label: t.timeseries.backgroundTotal,
+      tone: "muted" as const,
+      overlayId: "background-total" as const,
+      baseline: false,
+    },
+  ];
+
   return (
     <section className="timeSeries">
       <div className="timeSeriesHeader">
-        <h2 className="timeSeriesTitle">Time-series activity</h2>
-        <p className="timeSeriesSub">Last 5 minutes</p>
+        <h2 className="timeSeriesTitle">{t.timeseries.title}</h2>
+        <p className="timeSeriesSub">{t.timeseries.last5min}</p>
       </div>
 
       <div className="timeSeriesRows">
-        {(
-          [
-            {
-              kind: "main-agents" as const,
-              label: "Main agents" as const,
-            },
-            {
-              kind: "single" as const,
-              label: "background tasks (total)",
-              tone: "muted" as const,
-              overlayId: "background-total" as const,
-              baseline: false,
-            },
-          ] as const
-        ).map((row) => {
+        {rowConfigs.map((row) => {
           const H = 28;
           const padTop = 2;
           const padBottom = 2;
@@ -350,12 +352,12 @@ export function TimeSeriesActivitySection(props: { timeSeries: TimeSeries }) {
       <div className="timeSeriesAxisBottom" aria-hidden="true">
         <div />
         <div className="timeSeriesAxisBottomLabels">
-          <span className="timeSeriesAxisBottomLabel">-5m</span>
-          <span className="timeSeriesAxisBottomLabel">-4m</span>
-          <span className="timeSeriesAxisBottomLabel">-3m</span>
-          <span className="timeSeriesAxisBottomLabel">-2m</span>
-          <span className="timeSeriesAxisBottomLabel">-1m</span>
-          <span className="timeSeriesAxisBottomLabel">Now</span>
+          <span className="timeSeriesAxisBottomLabel">{t.timeseries.timeLabels.minus5}</span>
+          <span className="timeSeriesAxisBottomLabel">{t.timeseries.timeLabels.minus4}</span>
+          <span className="timeSeriesAxisBottomLabel">{t.timeseries.timeLabels.minus3}</span>
+          <span className="timeSeriesAxisBottomLabel">{t.timeseries.timeLabels.minus2}</span>
+          <span className="timeSeriesAxisBottomLabel">{t.timeseries.timeLabels.minus1}</span>
+          <span className="timeSeriesAxisBottomLabel">{t.timeseries.timeLabels.now}</span>
         </div>
       </div>
     </section>
@@ -989,6 +991,7 @@ function toDashboardPayload(json: unknown): DashboardPayload {
 
 export { toDashboardPayload };
 export default function App() {
+  const { t, lang, setLang } = useI18n();
   const [connected, setConnected] = React.useState(false);
   const [data, setData] = React.useState<DashboardPayload>(FALLBACK_DATA);
   const [lastUpdate, setLastUpdate] = React.useState<number | null>(null);
@@ -1489,9 +1492,9 @@ export default function App() {
           <div className="brand">
             <div className="brandMark" aria-hidden="true" />
             <div className="brandText">
-              <h1>{APP_TITLE}</h1>
+              <h1>{t.dashboard.title} ({t.common.version}{APP_VERSION})</h1>
               <p>
-                Live view (no prompts or tool arguments rendered).
+                {t.dashboard.subtitle}
                 {!connected && errorHint ? <span className="hint"> - {errorHint}</span> : null}
               </p>
             </div>
@@ -1499,7 +1502,7 @@ export default function App() {
           <div className="topbarActions">
             <span className={`pill pill-${liveTone}`}>
               <span className="pillDot" aria-hidden="true" />
-              {liveLabel}
+              {connected ? t.status.live : t.status.disconnected}
             </span>
             {sources.length > 0 ? (
               <SourceSelect
@@ -1510,12 +1513,20 @@ export default function App() {
               />
             ) : null}
             <button
+              className="button"
+              type="button"
+              onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}
+              title={lang === 'en' ? t.actions.switchToChinese : t.actions.switchToEnglish}
+            >
+              {lang === 'en' ? '中文' : 'EN'}
+            </button>
+            <button
               className="button buttonIcon"
               type="button"
               onClick={toggleTheme}
               aria-pressed={theme === "dark"}
-              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={theme === "dark" ? t.actions.switchToLight : t.actions.switchToDark}
+              title={theme === "dark" ? t.actions.switchToLight : t.actions.switchToDark}
             >
               {theme === "dark" ? (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1540,62 +1551,62 @@ export default function App() {
               type="button"
               onClick={() => void enableSound(!soundEnabled)}
               aria-pressed={soundEnabled}
-              title={soundEnabled ? "Disable sound" : "Enable sound"}
+              title={soundEnabled ? t.actions.disableSound : t.actions.enableSound}
             >
-              Sound {soundEnabled ? (soundUnlocked ? "On" : "On") : "Off"}
+              {soundEnabled ? t.actions.soundOn : t.actions.soundOff}
             </button>
             <button
               className="button"
               type="button"
               onClick={() => void playDing("task")}
-              title="Play ding"
-              aria-label="Play ding sound"
+              title={t.actions.playDing}
+              aria-label={t.actions.playDing}
             >
-              Ding
+              {lang === 'zh' ? '叮' : 'Ding'}
             </button>
             <button className="button" type="button" onClick={onCopyRawJson}>
-              {copyState === "ok" ? "Copied" : copyState === "err" ? "Copy failed" : "Copy raw JSON"}
+              {copyState === "ok" ? t.actions.copied : copyState === "err" ? t.actions.copyFailed : t.actions.copyJson}
             </button>
           </div>
         </header>
 
         <main className="stack">
-          <TimeSeriesActivitySection timeSeries={data.timeSeries} />
+          <TimeSeriesActivitySection timeSeries={data.timeSeries} t={t} />
 
           <section className="grid2">
             <article className="card">
               <div className="cardHeader">
-                <h2>Main session</h2>
+                <h2>{t.session.title}</h2>
                 <span className={`pill pill-${statusTone(data.mainSession.statusPill)}`}>{data.mainSession.statusPill}</span>
               </div>
               <div className="kv">
                 <div className="kvRow">
-                  <div className="kvKey">AGENT</div>
+                  <div className="kvKey">{t.session.agent}</div>
                   <div className="kvVal mono">{data.mainSession.agent}</div>
                 </div>
                 <div className="kvRow">
-                  <div className="kvKey">CURRENT TOOL</div>
+                  <div className="kvKey">{t.session.currentTool}</div>
                   <div className="kvVal mono">{data.mainSession.currentTool}</div>
                 </div>
                 <div className="kvRow">
-                  <div className="kvKey">CURRENT MODEL</div>
+                  <div className="kvKey">{t.session.currentModel}</div>
                   <div className="kvVal mono">{data.mainSession.currentModel}</div>
                 </div>
                 <div className="kvRow">
-                  <div className="kvKey">LAST UPDATED</div>
+                  <div className="kvKey">{t.session.lastUpdated}</div>
                   <div className="kvVal">{data.mainSession.lastUpdatedLabel}</div>
                 </div>
               </div>
               <div className="divider" />
               <div className="kvRow">
-                <div className="kvKey">SESSION</div>
+                <div className="kvKey">{t.session.sessionLabel}</div>
                 <div className="kvVal mono">{data.mainSession.session}</div>
               </div>
             </article>
 
             <article className="card">
               <div className="cardHeader">
-                <h2>Plan progress</h2>
+                <h2>{t.plan.title}</h2>
                 <span className={`pill pill-${statusTone(data.planProgress.statusPill)}`}>{data.planProgress.statusPill}</span>
               </div>
               <div className="cardHeader" style={{ marginTop: 8 }}>
@@ -1605,16 +1616,16 @@ export default function App() {
                   onClick={() => setPlanOpen((v) => !v)}
                   aria-expanded={planOpen}
                 >
-                  {planOpen ? "Hide steps" : "Show steps"}
+                  {planOpen ? t.plan.hideSteps : t.plan.showSteps}
                 </button>
               </div>
               <div className="kv">
                 <div className="kvRow">
-                  <div className="kvKey">NAME</div>
+                  <div className="kvKey">{t.plan.name}</div>
                   <div className="kvVal mono">{data.planProgress.name}</div>
                 </div>
                 <div className="kvRow">
-                  <div className="kvKey">PROGRESS</div>
+                  <div className="kvKey">{t.plan.progress}</div>
                   <div className="kvVal">
                     <span className="mono">
                       {data.planProgress.completed}/{data.planProgress.total || "?"}
@@ -1632,7 +1643,7 @@ export default function App() {
                     ? (data.planProgress.steps ?? []).map((s, idx) => (
                         <div key={`${idx}-${s.checked ? "x" : "_"}-${s.text}`}>[{s.checked ? "x" : " "}] {s.text || "(empty)"}</div>
                       ))
-                    : "(no steps detected)"}
+                    : t.plan.noSteps}
                 </div>
               ) : null}
               <div className="progressWrap">
@@ -1646,7 +1657,7 @@ export default function App() {
 
           <section className="card">
             <div className="cardHeader">
-              <h2>Token usage</h2>
+              <h2>{t.tokens.title}</h2>
               <span className="badge">{data.tokenUsage.rows.length}</span>
             </div>
 
@@ -1654,17 +1665,17 @@ export default function App() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>MODEL</th>
-                    <th>INPUT</th>
-                    <th>OUTPUT</th>
-                    <th>REASONING</th>
-                    <th>CACHE.READ</th>
-                    <th>CACHE.WRITE</th>
+                    <th>{t.tokens.headers.model}</th>
+                    <th>{t.tokens.headers.input}</th>
+                    <th>{t.tokens.headers.output}</th>
+                    <th>{t.tokens.headers.reasoning}</th>
+                    <th>{t.tokens.headers.cacheRead}</th>
+                    <th>{t.tokens.headers.cacheWrite}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="mono">TOTAL</td>
+                    <td className="mono">{t.tokens.total}</td>
                     <td className="mono">{formatTokenCount(tokenUsageTotalsForUi.input)}</td>
                     <td className="mono">{formatTokenCount(tokenUsageTotalsForUi.output)}</td>
                     <td className="mono">{formatTokenCount(tokenUsageTotalsForUi.reasoning)}</td>
@@ -1675,7 +1686,7 @@ export default function App() {
                   {tokenUsageRowsSorted.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="muted" style={{ padding: 16 }}>
-                        No token usage detected yet.
+                        {t.tokens.noUsage}
                       </td>
                     </tr>
                   ) : null}
@@ -1686,7 +1697,7 @@ export default function App() {
             {tokenUsageRowsSorted.length > 0 ? (
               <details className="details">
                 <summary className="detailsSummary">
-                  <span className="detailsTitle">Model breakdown ({tokenUsageRowsSorted.length})</span>
+                  <span className="detailsTitle">{t.tokens.modelBreakdown} ({tokenUsageRowsSorted.length})</span>
                   <span className="chev" aria-hidden="true" />
                 </summary>
                 <div className="detailsBody">
@@ -1694,12 +1705,12 @@ export default function App() {
                     <table className="table">
                       <thead>
                         <tr>
-                          <th>MODEL</th>
-                          <th>INPUT</th>
-                          <th>OUTPUT</th>
-                          <th>REASONING</th>
-                          <th>CACHE.READ</th>
-                          <th>CACHE.WRITE</th>
+                          <th>{t.tokens.headers.model}</th>
+                          <th>{t.tokens.headers.input}</th>
+                          <th>{t.tokens.headers.output}</th>
+                          <th>{t.tokens.headers.reasoning}</th>
+                          <th>{t.tokens.headers.cacheRead}</th>
+                          <th>{t.tokens.headers.cacheWrite}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1725,7 +1736,7 @@ export default function App() {
 
           <section className="card">
             <div className="cardHeader">
-              <h2>Main session tasks</h2>
+              <h2>{t.tasks.mainTitle}</h2>
               <span className="badge">{data.mainSessionTasks.length}</span>
             </div>
 
@@ -1733,27 +1744,27 @@ export default function App() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>DESCRIPTION</th>
-                    <th>AGENT</th>
-                    <th>LAST MODEL</th>
-                    <th>STATUS</th>
-                    <th>TOOL CALLS</th>
-                    <th>LAST TOOL</th>
-                    <th>TIMELINE</th>
+                    <th>{t.tasks.headers.description}</th>
+                    <th>{t.session.agent}</th>
+                    <th>{t.tasks.headers.lastModel}</th>
+                    <th>{t.tasks.headers.status}</th>
+                    <th>{t.tasks.headers.toolCalls}</th>
+                    <th>{t.tasks.headers.lastTool}</th>
+                    <th>{t.tasks.headers.timeline}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.mainSessionTasks.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="muted" style={{ padding: 16 }}>
-                        No main session tasks detected yet.
+                        {t.tasks.noMainTasks}
                       </td>
                     </tr>
                   ) : null}
-                  {data.mainSessionTasks.map((t) => {
-                    const expanded = expandedMainTaskIds.has(t.id);
-                    const sessionId = toNonEmptyString(t.sessionId);
-                    const detailId = `main-toolcalls-${t.id}`;
+                  {data.mainSessionTasks.map((task) => {
+                    const expanded = expandedMainTaskIds.has(task.id);
+                    const sessionId = toNonEmptyString(task.sessionId);
+                    const detailId = `main-toolcalls-${task.id}`;
                     const entry = sessionId ? toolCallsBySession.get(sessionId) : null;
                     const toolCalls = entry?.data?.ok ? entry.data.toolCalls : [];
                     const showCapped = Boolean(entry?.data?.truncated);
@@ -1763,54 +1774,54 @@ export default function App() {
                     const empty = sessionId ? toolCalls.length === 0 && !showLoading && !showError : true;
 
                     return (
-                      <React.Fragment key={t.id}>
+                      <React.Fragment key={task.id}>
                         <tr>
                           <td>
                             <div className="bgTaskRowTitleWrap">
                               <button
                                 type="button"
                                 className="bgTaskToggle"
-                                onClick={() => toggleMainTaskExpanded(t)}
+                                onClick={() => toggleMainTaskExpanded(task)}
                                 aria-expanded={expanded}
                                 aria-controls={detailId}
-                                title={expanded ? "Collapse" : "Expand"}
-                                aria-label={expanded ? "Collapse tool calls" : "Expand tool calls"}
+                                title={expanded ? t.actions.collapse : t.actions.expand}
+                                aria-label={expanded ? t.actions.collapse : t.actions.expand}
                               />
                               <div className="bgTaskRowTitleText">
-                                <div className="taskTitle">{t.description}</div>
-                                {t.subline ? <div className="taskSub mono">{t.subline}</div> : null}
+                                <div className="taskTitle">{task.description}</div>
+                                {task.subline ? <div className="taskSub mono">{task.subline}</div> : null}
                               </div>
                             </div>
                           </td>
-                          <td className="mono">{t.agent}</td>
-                          <td className="mono">{t.lastModel}</td>
+                          <td className="mono">{task.agent}</td>
+                          <td className="mono">{task.lastModel}</td>
                           <td>
-                            <span className={`pill pill-${statusTone(t.status)}`}>{t.status}</span>
+                            <span className={`pill pill-${statusTone(task.status)}`}>{task.status}</span>
                           </td>
-                          <td className="mono">{t.toolCalls}</td>
-                          <td className="mono">{t.lastTool}</td>
-                          <td className="mono muted">{formatBackgroundTaskTimelineCell(t.status, t.timeline)}</td>
+                          <td className="mono">{task.toolCalls}</td>
+                          <td className="mono">{task.lastTool}</td>
+                          <td className="mono muted">{formatBackgroundTaskTimelineCell(task.status, task.timeline)}</td>
                         </tr>
 
                         {expanded ? (
                           <tr>
                             <td colSpan={7} className="bgTaskDetailCell">
-                              <section id={detailId} aria-label="Tool calls" className="bgTaskDetail">
+                              <section id={detailId} aria-label={t.toolCalls.title} className="bgTaskDetail">
                                 <div className="mono muted bgTaskDetailHeader">
-                                  Tool calls (metadata only){showLoading && toolCalls.length > 0 ? " - refreshing" : ""}
+                                  {t.toolCalls.metadataOnly}{showLoading && toolCalls.length > 0 ? ` - ${lang === 'zh' ? '刷新中' : 'refreshing'}` : ""}
                                   {showCapped
-                                    ? ` - capped${caps ? ` (max ${caps.maxMessages} messages / ${caps.maxToolCalls} tool calls)` : ""}`
+                                    ? ` - ${t.toolCalls.capped}${caps ? ` (${caps.maxMessages} / ${caps.maxToolCalls})` : ""}`
                                     : ""}
                                 </div>
 
                                 {!sessionId ? (
-                                  <div className="muted bgTaskDetailEmpty">No session id available for this task.</div>
+                                  <div className="muted bgTaskDetailEmpty">{t.toolCalls.noSessionId}</div>
                                 ) : showError ? (
-                                  <div className="muted bgTaskDetailEmpty">Tool calls unavailable.</div>
+                                  <div className="muted bgTaskDetailEmpty">{lang === 'zh' ? '工具调用不可用' : 'Tool calls unavailable.'}</div>
                                 ) : showLoading && toolCalls.length === 0 ? (
-                                  <div className="muted bgTaskDetailEmpty">Loading tool calls...</div>
+                                  <div className="muted bgTaskDetailEmpty">{t.toolCalls.loading}</div>
                                 ) : empty ? (
-                                  <div className="muted bgTaskDetailEmpty">No tool calls recorded.</div>
+                                  <div className="muted bgTaskDetailEmpty">{t.toolCalls.noRecords}</div>
                                 ) : (
                                   <div className="bgTaskToolCallsGrid">
                                     {toolCalls.map((c) => (
@@ -1845,7 +1856,7 @@ export default function App() {
 
           <section className="card">
             <div className="cardHeader">
-              <h2>Background tasks</h2>
+              <h2>{t.tasks.backgroundTitle}</h2>
               <span className="badge">
                 {data.backgroundTasks.length}
               </span>
@@ -1854,27 +1865,27 @@ export default function App() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>DESCRIPTION</th>
-                    <th>AGENT</th>
-                    <th>LAST MODEL</th>
-                    <th>STATUS</th>
-                    <th>TOOL CALLS</th>
-                    <th>LAST TOOL</th>
-                    <th>TIMELINE</th>
+                    <th>{t.tasks.headers.description}</th>
+                    <th>{t.tasks.headers.agent}</th>
+                    <th>{t.tasks.headers.lastModel}</th>
+                    <th>{t.tasks.headers.status}</th>
+                    <th>{t.tasks.headers.toolCalls}</th>
+                    <th>{t.tasks.headers.lastTool}</th>
+                    <th>{t.tasks.headers.timeline}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.backgroundTasks.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="muted" style={{ padding: 16 }}>
-                        No background tasks detected yet. When you run background agents, they will appear here.
+                        {t.tasks.noBackgroundTasks}
                       </td>
                     </tr>
                   ) : null}
-                  {data.backgroundTasks.map((t) => {
-                    const expanded = expandedBgTaskIds.has(t.id);
-                    const sessionId = toNonEmptyString(t.sessionId);
-                    const detailId = `bg-toolcalls-${t.id}`;
+                  {data.backgroundTasks.map((bgTask) => {
+                    const expanded = expandedBgTaskIds.has(bgTask.id);
+                    const sessionId = toNonEmptyString(bgTask.sessionId);
+                    const detailId = `bg-toolcalls-${bgTask.id}`;
                     const entry = sessionId ? toolCallsBySession.get(sessionId) : null;
                     const toolCalls = entry?.data?.ok ? entry.data.toolCalls : [];
                     const showCapped = Boolean(entry?.data?.truncated);
@@ -1884,62 +1895,54 @@ export default function App() {
                     const empty = sessionId ? toolCalls.length === 0 && !showLoading && !showError : true;
 
                     return (
-                      <React.Fragment key={t.id}>
+                      <React.Fragment key={bgTask.id}>
                         <tr>
                           <td>
                             <div className="bgTaskRowTitleWrap">
                               <button
                                 type="button"
                                 className="bgTaskToggle"
-                                onClick={() => toggleBackgroundTaskExpanded(t)}
+                                onClick={() => toggleBackgroundTaskExpanded(bgTask)}
                                 aria-expanded={expanded}
                                 aria-controls={detailId}
-                                title={expanded ? "Collapse" : "Expand"}
-                                aria-label={expanded ? "Collapse tool calls" : "Expand tool calls"}
+                                title={expanded ? t.actions.collapse : t.actions.expand}
+                                aria-label={expanded ? t.actions.collapse : t.actions.expand}
                               />
                               <div className="bgTaskRowTitleText">
-                                <div className="taskTitle">{t.description}</div>
-                                {t.subline ? <div className="taskSub mono">{t.subline}</div> : null}
+                                <div className="taskTitle">{bgTask.description}</div>
+                                {bgTask.subline ? <div className="taskSub mono">{bgTask.subline}</div> : null}
                               </div>
                             </div>
                           </td>
-                          <td className="mono">{t.agent}</td>
-                          <td className="mono">{t.lastModel}</td>
+                          <td className="mono">{bgTask.agent}</td>
+                          <td className="mono">{bgTask.lastModel}</td>
                           <td>
-                            <span className={`pill pill-${statusTone(t.status)}`}>{t.status}</span>
+                            <span className={`pill pill-${statusTone(bgTask.status)}`}>{bgTask.status}</span>
                           </td>
-                          <td className="mono">{t.toolCalls}</td>
-                          <td className="mono">{t.lastTool}</td>
-                          <td className="mono muted">{formatBackgroundTaskTimelineCell(t.status, t.timeline)}</td>
+                          <td className="mono">{bgTask.toolCalls}</td>
+                          <td className="mono">{bgTask.lastTool}</td>
+                          <td className="mono muted">{formatBackgroundTaskTimelineCell(bgTask.status, bgTask.timeline)}</td>
                         </tr>
 
                         {expanded ? (
                           <tr>
                             <td colSpan={7} className="bgTaskDetailCell">
-                              <section id={detailId} aria-label="Tool calls" className="bgTaskDetail">
+                              <section id={detailId} aria-label={t.toolCalls.title} className="bgTaskDetail">
                                 <div className="mono muted bgTaskDetailHeader">
-                                  Tool calls (metadata only){showLoading && toolCalls.length > 0 ? " - refreshing" : ""}
+                                  {t.toolCalls.metadataOnly}{showLoading && toolCalls.length > 0 ? ` - ${lang === 'zh' ? '刷新中' : 'refreshing'}` : ""}
                                   {showCapped
-                                    ? ` - capped${caps ? ` (max ${caps.maxMessages} messages / ${caps.maxToolCalls} tool calls)` : ""}`
+                                    ? ` - ${t.toolCalls.capped}${caps ? ` (${caps.maxMessages} / ${caps.maxToolCalls})` : ""}`
                                     : ""}
                                 </div>
 
                                 {!sessionId ? (
-                                  <div className="muted bgTaskDetailEmpty">
-                                    No session id available for this task.
-                                  </div>
+                                  <div className="muted bgTaskDetailEmpty">{t.toolCalls.noSessionId}</div>
                                 ) : showError ? (
-                                  <div className="muted bgTaskDetailEmpty">
-                                    Tool calls unavailable.
-                                  </div>
+                                  <div className="muted bgTaskDetailEmpty">{lang === 'zh' ? '工具调用不可用' : 'Tool calls unavailable.'}</div>
                                 ) : showLoading && toolCalls.length === 0 ? (
-                                  <div className="muted bgTaskDetailEmpty">
-                                    Loading tool calls...
-                                  </div>
+                                  <div className="muted bgTaskDetailEmpty">{t.toolCalls.loading}</div>
                                 ) : empty ? (
-                                  <div className="muted bgTaskDetailEmpty">
-                                    No tool calls recorded.
-                                  </div>
+                                  <div className="muted bgTaskDetailEmpty">{t.toolCalls.noRecords}</div>
                                 ) : (
                                   <div className="bgTaskToolCallsGrid">
                                     {toolCalls.map((c) => (
@@ -1974,7 +1977,7 @@ export default function App() {
 
           <details className="details">
             <summary className="detailsSummary">
-              <span className="detailsTitle">Raw JSON</span>
+              <span className="detailsTitle">{t.actions.rawJson}</span>
               <span className="chev" aria-hidden="true" />
             </summary>
             <div className="detailsBody">
@@ -1987,10 +1990,10 @@ export default function App() {
 
         <footer className="footer">
           <div className="footerLeft">
-            Local-only dashboard. Served from <span className="mono">{servedFrom}</span>
+            {t.dashboard.localOnly} {t.dashboard.servedFrom} <span className="mono">{servedFrom}</span>
           </div>
           <div className="footerRight">
-            Last update: <span className="mono">{formatTime(lastUpdate)}</span>
+            {lang === 'zh' ? '最后更新：' : 'Last update: '}<span className="mono">{formatTime(lastUpdate)}</span>
           </div>
         </footer>
       </div>
