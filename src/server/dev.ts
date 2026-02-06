@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 import { Hono } from "hono"
+import { basename } from "node:path"
 import { createApi } from "./api"
 import { createDashboardStore, type DashboardStore } from "./dashboard"
 import { getOpenCodeStorageDir } from "../ingest/paths"
+import { addOrUpdateSource } from "../ingest/sources-registry"
 
 const args = process.argv.slice(2)
 let projectPath: string | undefined;
@@ -27,6 +29,10 @@ const resolvedProjectPath = projectPath ?? process.cwd()
 const app = new Hono()
 
 const storageRoot = getOpenCodeStorageDir()
+
+// Auto-register current project as a source (no manual "add" needed)
+const autoLabel = basename(resolvedProjectPath)
+addOrUpdateSource(storageRoot, { projectRoot: resolvedProjectPath, label: autoLabel })
 
 const store = createDashboardStore({
   projectRoot: resolvedProjectPath,

@@ -57,6 +57,10 @@ const app = new Hono()
 
 const storageRoot = getOpenCodeStorageDir()
 
+// Auto-register current project as a source (no manual "add" needed)
+const autoLabel = values.name ?? basename(project)
+addOrUpdateSource(storageRoot, { projectRoot: project, label: autoLabel })
+
 const store = createDashboardStore({
   projectRoot: project,
   storageRoot,
